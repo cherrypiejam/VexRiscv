@@ -10,7 +10,7 @@ import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvLitexSmpClusterCmdGen.exposeTime
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.ip.fpu.{FpuCore, FpuParameter}
-import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
+import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin, RvfiPort}
 
 
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
@@ -131,6 +131,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dTlbSize = 4
   var wishboneForce32b = false
   var exposeTime = false
+  var formal = false
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
@@ -158,6 +159,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
     opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
+    opt[String]("formal" ) action { (v, c) => formal = v.toBoolean  }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -185,7 +187,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           rvc = rvc,
           injectorStage = rvc,
           iTlbSize = iTlbSize,
-          dTlbSize = dTlbSize
+          dTlbSize = dTlbSize,
+          withFormal = formal
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
@@ -209,10 +212,14 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
 
   def dutGen = {
     val toplevel = new Component {
+      val rvfi = formal generate out(RvfiPort(cpuCount))
       val body = new VexRiscvLitexSmpCluster(
         p = parameter
       )
       body.setName("")
+      if (formal) {
+        rvfi := body.rvfiClusterAggregator.rvfi
+      }
     }
     toplevel
   }

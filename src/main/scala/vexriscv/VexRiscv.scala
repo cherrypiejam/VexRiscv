@@ -53,6 +53,11 @@ case class VexRiscvConfig(){
     case None => false
   }
 
+  def withFormal = find(classOf[FormalPlugin]) match {
+    case Some(x) => true
+    case None => false
+  }
+
   def FLEN = if(withRvd) 64 else if(withRvf) 32 else 0
 
   //Default Stageables

@@ -4,44 +4,44 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.VexRiscv
 
-case class RvfiPortRsRead() extends Bundle{
-  val addr = UInt(5 bits)
-  val rdata = Bits(32 bits)
+case class RvfiPortRsRead(nret : Int) extends Bundle{
+  val addr = UInt((nret * 5) bits)
+  val rdata = Bits((nret * 32) bits)
 }
 
-case class RvfiPortRsWrite() extends Bundle{
-  val addr = UInt(5 bits)
-  val wdata = Bits(32 bits)
+case class RvfiPortRsWrite(nret : Int) extends Bundle{
+  val addr = UInt((nret * 5) bits)
+  val wdata = Bits((nret * 32) bits)
 }
 
-case class RvfiPortPc() extends Bundle{
-  val rdata = UInt(32 bits)
-  val wdata = UInt(32 bits)
+case class RvfiPortPc(nret : Int) extends Bundle{
+  val rdata = UInt((nret * 32) bits)
+  val wdata = UInt((nret * 32) bits)
 }
 
 
-case class RvfiPortMem() extends Bundle{
-  val addr  = UInt(32 bits)
-  val rmask = Bits(4 bits)
-  val wmask = Bits(4 bits)
-  val rdata = Bits(32 bits)
-  val wdata = Bits(32 bits)
+case class RvfiPortMem(nret : Int) extends Bundle{
+  val addr  = UInt((nret * 32) bits)
+  val rmask = Bits((nret * 4) bits)
+  val wmask = Bits((nret * 4) bits)
+  val rdata = Bits((nret * 32) bits)
+  val wdata = Bits((nret * 32) bits)
 }
 
-case class RvfiPort() extends Bundle with IMasterSlave {
-  val valid = Bool
-  val order = UInt(64 bits)
-  val insn = Bits(32 bits)
-  val trap = Bool
-  val halt = Bool
-  val intr = Bool
-  val mode = Bits(2 bits)
-  val ixl = Bits(2 bits)
-  val rs1 = RvfiPortRsRead()
-  val rs2 = RvfiPortRsRead()
-  val rd = RvfiPortRsWrite()
-  val pc = RvfiPortPc()
-  val mem = RvfiPortMem()
+case class RvfiPort(nret : Int) extends Bundle with IMasterSlave {
+  val valid = Bits(nret bits)
+  val order = UInt((nret * 64) bits)
+  val insn = Bits((nret * 32) bits)
+  val trap = Bits(nret bits)
+  val halt = Bits(nret bits)
+  val intr = Bits(nret bits)
+  val mode = Bits((nret * 2) bits)
+  val ixl = Bits((nret * 2) bits)
+  val rs1 = RvfiPortRsRead(nret)
+  val rs2 = RvfiPortRsRead(nret)
+  val rd = RvfiPortRsWrite(nret)
+  val pc = RvfiPortPc(nret)
+  val mem = RvfiPortMem(nret)
 
   override def asMaster(): Unit = out(this)
 }
@@ -70,7 +70,7 @@ class FormalPlugin extends Plugin[VexRiscv]{
 
 
   override def setup(pipeline: VexRiscv): Unit = {
-    rvfi = master(RvfiPort()).setName("rvfi")
+    rvfi = master(RvfiPort(1)).setName("rvfi")
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -87,12 +87,12 @@ class FormalPlugin extends Plugin[VexRiscv]{
       }
 
 
-      rvfi.valid :=  arbitration.isFiring
+      rvfi.valid :=  arbitration.isFiring.asBits
       rvfi.order := order
       rvfi.insn := output(FORMAL_INSTRUCTION)
-      rvfi.trap := False
-      rvfi.halt := False
-      rvfi.intr := False
+      rvfi.trap := False.asBits
+      rvfi.halt := False.asBits
+      rvfi.intr := False.asBits
       rvfi.mode := output(FORMAL_MODE)
       rvfi.ixl := 1
 //      rvfi.rs1.addr  := output(INSTRUCTION)(rs1Range).asUInt
@@ -123,13 +123,13 @@ class FormalPlugin extends Plugin[VexRiscv]{
       })
 
       when(Delay(haltRequest, 5, init=False)){ //Give time for value propagation from decode stage to writeback stage
-        rvfi.valid := True
-        rvfi.trap := True
-        rvfi.halt := True
+        rvfi.valid := True.asBits
+        rvfi.trap := True.asBits
+        rvfi.halt := True.asBits
       }
 
-      val haltFired = RegInit(False) setWhen(rvfi.valid && rvfi.halt)
-      rvfi.valid clearWhen(haltFired)
+      val haltFired = RegInit(False) setWhen(rvfi.valid.asBool && rvfi.halt.asBool)
+      rvfi.valid.asBool clearWhen(haltFired)
     }
   }
 }
