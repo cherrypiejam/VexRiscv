@@ -317,7 +317,10 @@ object VexRiscvSmpClusterGen {
                      forceMscratch : Boolean = false,
                      privilegedDebug : Boolean = false,
                      csrFull : Boolean = false,
-                     withFormal: Boolean = false
+                     withFormal: Boolean = false,
+                     pmpRegions: Int = 0,
+                     pmpGranularity: Int = 256,
+                     pmpAddressMatchingModes : String = "na4,napot,tor"
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -339,7 +342,8 @@ object VexRiscvSmpClusterGen {
       c
     } else {
       assert(!csrFull)
-      CsrPluginConfig(
+      if (pmpRegions > 0) CsrPluginConfig.secure(null)
+      else CsrPluginConfig(
         catchIllegalAccess = true,
         mvendorid      = 0,
         marchid        = 0,
@@ -367,7 +371,30 @@ object VexRiscvSmpClusterGen {
       plugins = List(
         if(withMmu)new MmuPlugin(
           ioRange = ioRange
-        )else new StaticMemoryTranslatorPlugin(
+        ) else if (pmpRegions > 0) {
+          val splitModes = pmpAddressMatchingModes.toLowerCase().split(",");
+
+          // Ensure the user didn't request any unsupported modes
+          val unknownModes = splitModes.filterNot(s => List("na4", "napot", "tor").contains(s));
+          if (unknownModes.length > 0) {
+           throw new Exception("Unknown PMP addressing mode: " + unknownModes(0));
+          }
+
+          if (splitModes.sameElements(List("napot"))) {
+            println("Using optimized PmpPluginNapot, supporting only the NAPOT addressing mode.");
+            new PmpPlugin(
+              regions = pmpRegions,
+              granularity = pmpGranularity,
+              ioRange = ioRange
+            )
+          } else {
+            println("Using PmpPlugin supporting the NA4, NAPOT, and TOR addressing modes.");
+            println("This will ignore the pmpGranularity argument and have 4-byte granularity.");
+            new PmpPluginOld (
+              regions = 16, ioRange = ioRange
+            )
+          }
+        } else new StaticMemoryTranslatorPlugin(
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
