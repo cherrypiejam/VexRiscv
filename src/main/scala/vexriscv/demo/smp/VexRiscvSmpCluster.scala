@@ -382,7 +382,7 @@ object VexRiscvSmpClusterGen {
 
           if (splitModes.sameElements(List("napot"))) {
             println("Using optimized PmpPluginNapot, supporting only the NAPOT addressing mode.");
-            new PmpPlugin(
+            new PmpPluginNapot(
               regions = pmpRegions,
               granularity = pmpGranularity,
               ioRange = ioRange
@@ -390,7 +390,7 @@ object VexRiscvSmpClusterGen {
           } else {
             println("Using PmpPlugin supporting the NA4, NAPOT, and TOR addressing modes.");
             println("This will ignore the pmpGranularity argument and have 4-byte granularity.");
-            new PmpPluginOld (
+            new PmpPlugin (
               regions = 16, ioRange = ioRange
             )
           }
