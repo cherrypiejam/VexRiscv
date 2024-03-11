@@ -136,6 +136,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var pmpGranularity = 256
   var pmpAddressMatchingModes = "na4,napot,tor"
   var withSupervisor = true
+  var mmu = true
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
@@ -168,6 +169,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[Int]   ("pmpGranularity") action { (v, c) => pmpGranularity = v } text("Granularity of PMP regions (in bytes)")
     opt[String]("pmpAddressMatchingModes") action { (v, c) => pmpAddressMatchingModes = v } text("Which PMP address matching modes to support (comma-separated, out of [NA4, NAPOT, TOR])")
     opt[String]("withSupervisor") action { (v, c) => withSupervisor = v.toBoolean }
+    opt[String]("mmu") action { (v, c) => mmu = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -200,7 +202,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           pmpRegions = pmpRegions,
           pmpGranularity = pmpGranularity,
           pmpAddressMatchingModes = pmpAddressMatchingModes,
-          withSupervisor = withSupervisor
+          withSupervisor = withSupervisor,
+          withMmu = mmu
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
