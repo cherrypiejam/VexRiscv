@@ -153,11 +153,10 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
-    // TODO: let's not worry about caches for now
-    // opt[String]("icache-size") action { (v, c) => iCacheSize = v.toInt }
-    // opt[String]("dcache-size") action { (v, c) => dCacheSize = v.toInt }
-    // opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
-    // opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
+    opt[String]("icache-size") action { (v, c) => iCacheSize = v.toInt }
+    opt[String]("dcache-size") action { (v, c) => dCacheSize = v.toInt }
+    opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
+    opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
     opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
     opt[Int]   ("hardware-breakpoints") action { (v, c) => hardwareBreakpoints = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
@@ -189,6 +188,10 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
           dCacheSize = dCacheSize,
           iCacheWays = iCacheWays,
           dCacheWays = dCacheWays,
+          withInstructionCache =
+            if (iCacheSize == 0) false else true,
+          withDataCache =
+            if (dCacheSize == 0) false else true,
           coherency = coherency,
           privilegedDebug = privilegedDebug,
           iBusRelax = true,
