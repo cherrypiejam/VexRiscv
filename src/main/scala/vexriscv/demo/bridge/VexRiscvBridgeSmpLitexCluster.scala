@@ -122,7 +122,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 }
 
 
-object VexRiscvLitexBridgeSmpClusterCmdGen extends App {
+object VexRiscvLitexSmpClusterCmdGen extends App {
   Handle.loadHandleAsync = true
   var cpuCount = 1
   var iBusWidth = 64
