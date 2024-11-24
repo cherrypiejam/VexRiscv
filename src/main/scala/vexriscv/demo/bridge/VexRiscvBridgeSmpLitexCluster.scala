@@ -16,7 +16,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.generator.GeneratorComponent
 import spinal.lib.sim.SparseMemory
-import vexriscv.demo.bridge.VexRiscvLitexSmpClusterCmdGen.exposeTime
+import vexriscv.demo.bridge.VexRiscvBridgeLitexSmpClusterCmdGen.exposeTime
 import vexriscv.demo.bridge.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.ip.fpu.{FpuCore, FpuParameter}
 import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
@@ -122,7 +122,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 }
 
 
-object VexRiscvLitexSmpClusterCmdGen extends App {
+object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
   Handle.loadHandleAsync = true
   var cpuCount = 1
   var iBusWidth = 64
@@ -147,7 +147,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dTlbSize = 4
   var wishboneForce32b = false
   var exposeTime = false
-  assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
+  assert(new scopt.OptionParser[Unit]("VexRiscvBridgeLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
