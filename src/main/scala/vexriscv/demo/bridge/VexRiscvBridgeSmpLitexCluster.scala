@@ -32,9 +32,7 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
 
 
 class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
-  // TODO: remove iArbiter
-  // TODO: we don't care Dram for now
-  val iArbiter = BmbBridgeGenerator()
+  val iArbiter = !p.wishboneMemory generate BmbBridgeGenerator()
   val iBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
   val dBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
 
@@ -43,7 +41,6 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
       core.cpu.iBus -> List(peripheralLocalBridge.bmb),
       core.dBusLocal.bmb -> List(peripheralLocalBridge.bmb)
     )
-    // interconnect.addConnection(core.cpu.iBus -> List(iArbiter.bmb))
   }
 
   !p.wishboneMemory generate interconnect.addConnection(
@@ -52,7 +49,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
   )
 
   interconnect.addConnection(
-    dBusShared.bmb -> List(peripheralBridge.bmb)
+    dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
 
   val fpuGroups = (cores.reverse.grouped(p.cpuPerFpu)).toList.reverse
@@ -108,7 +105,9 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
   for(core <- cores) {
     interconnect.setPipelining(core.cpu.dBus)(cmdValid = true, cmdReady = true, rspValid = true, invValid = true, ackValid = true, syncValid = true)
     interconnect.setPipelining(core.cpu.iBus)(cmdHalfRate = true, rspValid = true)
-    interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
+    !p.wishboneMemory generate {
+      interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
+    }
   }
   interconnect.setPipelining(dBusCoherent.bmb)(cmdValid = true, cmdReady = true)
   interconnect.setPipelining(dBusNonCoherent.bmb)(cmdValid = true, cmdReady = true, rspValid = true)
@@ -147,6 +146,7 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
   var dTlbSize = 4
   var wishboneForce32b = false
   var exposeTime = false
+  var withMmu = false
   assert(new scopt.OptionParser[Unit]("VexRiscvBridgeLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
@@ -163,15 +163,16 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
     opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
-    opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean  }
-    opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean  }
-    opt[String]("wishbone-force-32b" ) action { (v, c) => wishboneForce32b = v.toBoolean  }
-    opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean  }
+    opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean }
+    opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean }
+    opt[String]("wishbone-force-32b" ) action { (v, c) => wishboneForce32b = v.toBoolean }
+    opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean }
     opt[String]("cpu-per-fpu") action { (v, c) => cpuPerFpu = v.toInt }
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
     opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
     opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
+    opt[String]("mmu" ) action { (v, c) => withMmu = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -203,7 +204,8 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
           rvc = rvc,
           injectorStage = rvc,
           iTlbSize = iTlbSize,
-          dTlbSize = dTlbSize
+          dTlbSize = dTlbSize,
+          withMmu = withMmu,
         )
         if(aesInstruction) c.add(new AesPlugin)
         c

@@ -82,20 +82,20 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
   // TODO make the mapping parameterizable
   val dBusShared = BmbBridgeGenerator(
-    mapping = SizeMapping(0xc0000000, 0x10000000)
+    mapping = SizeMapping(0xc0000000, 0x1000)
+  )
+
+  interconnect.addConnection(
+    dBusShared.bmb -> List(dBusCoherent.bmb)
   )
 
   val cores = for(cpuId <- 0 until cpuCount) yield new Area{
     val cpu = VexRiscvBmbGenerator()
     cpu.config.load(p.cpuConfigs(cpuId))
 
-    // TODO make the mapping parameterizable
-    val dBusLocal = BmbBridgeGenerator(
-      mapping = SizeMapping(0x00000000, 0x10000000)
-    )
+    val dBusLocal = BmbBridgeGenerator()
     interconnect.addConnection(
       cpu.dBus -> List(dBusShared.bmb, dBusLocal.bmb),
-      dBusShared.bmb -> List(dBusCoherent.bmb)
     )
 
     cpu.hardwareBreakpointCount.load(p.hardwareBreakpoints)
@@ -165,7 +165,11 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   val peripheralLocalBridges = cores.map(_ => BmbToWishboneGenerator(DefaultMapping))
   val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
   val peripheral = Handle(peripheralBridge.logic.io.output.toIo)
-  if(p.forcePeripheralWidth) interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
+  if(p.forcePeripheralWidth) {
+    interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
+    for (localBridge <- peripheralLocalBridges)
+      interconnect.slaves(localBridge.bmb).forceAccessSourceDataWidth(32)
+  }
 
   val plic = BmbPlicGenerator()(interconnect = null)
   plic.priorityWidth.load(2)
@@ -253,7 +257,7 @@ object VexRiscvSmpClusterGen {
                      earlyBranch : Boolean = false,
                      earlyShifterInjection : Boolean = true,
                      dBusCmdMasterPipe : Boolean = false,
-                     withMmu : Boolean = true,
+                     withMmu : Boolean = false,
                      withSupervisor : Boolean = true,
                      withFloat : Boolean = false,
                      withDouble : Boolean = false,

@@ -217,6 +217,14 @@ class MmuPlugin(var ioRange : UInt => Bool,
         dBusAccess.cmd.data.assignDontCare()
         dBusAccess.cmd.writeMask.assignDontCare()
 
+        println("----------------------------------------------------------------")
+        println("----------------------------------------------------------------")
+        println("----------------------------------------------------------------")
+        println(sortedPortsInfo.length)
+        println("----------------------------------------------------------------")
+        println("----------------------------------------------------------------")
+        println("----------------------------------------------------------------")
+
         val refills = OHMasking.last(B(ports.map(port => port.handle.bus.cmd.last.isValid && port.requireMmuLockup && !port.dirty && !port.cacheHit)))
         switch(state){
           is(State.IDLE){
