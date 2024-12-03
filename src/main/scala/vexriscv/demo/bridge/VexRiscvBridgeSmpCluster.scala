@@ -79,10 +79,11 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
     interconnect.addConnection(dBusCoherent.bmb, dBusNonCoherent.bmb)
   }
 
-
   // TODO make the mapping parameterizable
   val dBusShared = BmbBridgeGenerator(
-    mapping = SizeMapping(0xc0000000, 0x1000)
+    // Scala doesn't support unsigned int
+    // 0xc0000000 will be interpreted as a signed integer, which is negative
+    mapping = SizeMapping(BigInt("40000000", 16), 0x10000000)
   )
 
   interconnect.addConnection(
@@ -93,8 +94,28 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
     val cpu = VexRiscvBmbGenerator()
     cpu.config.load(p.cpuConfigs(cpuId))
 
+    // With SMP, dBus decoder requires inv bits from both local and shared dBus
+    val dBusLocalCoherent = BmbBridgeGenerator()
+    val dBusLocalNonCoherent = BmbBridgeGenerator()
+
+    val smp = p.withExclusiveAndInvalidation generate new Area{
+      val exclusiveLocalMonitor = BmbExclusiveMonitorGenerator()
+      interconnect.addConnection(dBusLocalCoherent.bmb, exclusiveLocalMonitor.input)
+
+      val invalidationLocalMonitor = BmbInvalidateMonitorGenerator()
+      interconnect.addConnection(exclusiveLocalMonitor.output, invalidationLocalMonitor.input)
+      interconnect.addConnection(invalidationLocalMonitor.output, dBusLocalNonCoherent.bmb)
+      if(p.outOfOrderDecoder) interconnect.masters(invalidationLocalMonitor.output).withOutOfOrderDecoder()
+    }
+
+    val noSmp = !p.withExclusiveAndInvalidation generate new Area{
+      interconnect.addConnection(dBusLocalCoherent.bmb, dBusLocalNonCoherent.bmb)
+    }
+
     val dBusLocal = BmbBridgeGenerator()
+
     interconnect.addConnection(
+      dBusLocal.bmb -> List(dBusLocalCoherent.bmb),
       cpu.dBus -> List(dBusShared.bmb, dBusLocal.bmb),
     )
 
@@ -162,9 +183,10 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
 
 class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends VexRiscvSmpClusterBase(p) {
-  val peripheralLocalBridges = cores.map(_ => BmbToWishboneGenerator(DefaultMapping))
   val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
   val peripheral = Handle(peripheralBridge.logic.io.output.toIo)
+  val peripheralLocalBridges = cores.map(_ => BmbToWishboneGenerator(DefaultMapping))
+  val peripheralLocals = peripheralLocalBridges.map(p => Handle(p.logic.io.output.toIo))
   if(p.forcePeripheralWidth) {
     interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
     for (localBridge <- peripheralLocalBridges)

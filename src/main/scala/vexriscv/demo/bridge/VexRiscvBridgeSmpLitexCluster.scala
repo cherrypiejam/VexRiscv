@@ -36,13 +36,6 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
   val iBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
   val dBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
 
-  for((core, peripheralLocalBridge) <- cores.zip(peripheralLocalBridges)) {
-    interconnect.addConnection(
-      core.cpu.iBus -> List(peripheralLocalBridge.bmb),
-      core.dBusLocal.bmb -> List(peripheralLocalBridge.bmb)
-    )
-  }
-
   !p.wishboneMemory generate interconnect.addConnection(
     iArbiter.bmb        -> List(iBridge.bmb),
     dBusNonCoherent.bmb -> List(dBridge.bmb)
@@ -51,6 +44,13 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
   interconnect.addConnection(
     dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
+
+  for((core, peripheralLocalBridge) <- cores.zip(peripheralLocalBridges)) {
+    interconnect.addConnection(
+      core.cpu.iBus -> List(peripheralLocalBridge.bmb),
+      core.dBusLocalNonCoherent.bmb -> List(peripheralLocalBridge.bmb)
+    )
+  }
 
   val fpuGroups = (cores.reverse.grouped(p.cpuPerFpu)).toList.reverse
   val fpu = p.cluster.fpu generate { for(group <- fpuGroups) yield new Area{
@@ -276,91 +276,91 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
 //}
 
 ////addAttribute("""mark_debug = "true"""")
-object VexRiscvLitexSmpClusterOpenSbi extends App{
-  import spinal.core.sim._
+// object VexRiscvLitexSmpClusterOpenSbi extends App{
+//   import spinal.core.sim._
 
-  val simConfig = SimConfig
-  simConfig.withWave
-  simConfig.allOptimisation
+//   val simConfig = SimConfig
+//   simConfig.withWave
+//   simConfig.allOptimisation
 
-  val cpuCount = 2
+//   val cpuCount = 2
 
-  def parameter = VexRiscvLitexSmpClusterParameter(
-    cluster = VexRiscvSmpClusterParameter(
-      cpuConfigs = List.tabulate(cpuCount) { hartId =>
-        vexRiscvConfig(
-          hartId = hartId,
-          ioRange =  address => address(31 downto 28) === 0xF,
-          resetVector = 0x80000000l
-        )
-      },
-      withExclusiveAndInvalidation = true,
-      jtagHeaderIgnoreWidth = 0
-    ),
-    liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
-    liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
-    coherentDma = false,
-    wishboneMemory = false,
-    cpuPerFpu = 4,
-    exposeTime = false
-  )
+//   def parameter = VexRiscvLitexSmpClusterParameter(
+//     cluster = VexRiscvSmpClusterParameter(
+//       cpuConfigs = List.tabulate(cpuCount) { hartId =>
+//         vexRiscvConfig(
+//           hartId = hartId,
+//           ioRange =  address => address(31 downto 28) === 0xF,
+//           resetVector = 0x80000000l
+//         )
+//       },
+//       withExclusiveAndInvalidation = true,
+//       jtagHeaderIgnoreWidth = 0
+//     ),
+//     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+//     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
+//     coherentDma = false,
+//     wishboneMemory = false,
+//     cpuPerFpu = 4,
+//     exposeTime = false
+//   )
 
-  def dutGen = {
-    import GeneratorComponent.toGenerator
-    val top = new Component {
-      val body = new VexRiscvLitexSmpCluster(
-        p = parameter
-      )
-    }
-    top.rework{
-      top.body.clintWishbone.setAsDirectionLess.allowDirectionLessIo
-      top.body.peripheral.setAsDirectionLess.allowDirectionLessIo.simPublic()
+//   def dutGen = {
+//     import GeneratorComponent.toGenerator
+//     val top = new Component {
+//       val body = new VexRiscvLitexSmpCluster(
+//         p = parameter
+//       )
+//     }
+//     top.rework{
+//       top.body.clintWishbone.setAsDirectionLess.allowDirectionLessIo
+//       top.body.peripheral.setAsDirectionLess.allowDirectionLessIo.simPublic()
 
-      val hit = (top.body.peripheral.ADR <<2 >= 0xF0010000l && top.body.peripheral.ADR<<2 < 0xF0020000l)
-      top.body.clintWishbone.CYC := top.body.peripheral.CYC && hit
-      top.body.clintWishbone.STB := top.body.peripheral.STB
-      top.body.clintWishbone.WE := top.body.peripheral.WE
-      top.body.clintWishbone.ADR := top.body.peripheral.ADR.resized
-      top.body.clintWishbone.DAT_MOSI := top.body.peripheral.DAT_MOSI
-      top.body.peripheral.DAT_MISO := top.body.clintWishbone.DAT_MISO
-      top.body.peripheral.ACK := top.body.peripheral.CYC  && (!hit || top.body.clintWishbone.ACK)
-      top.body.peripheral.ERR := False
-    }
-    top
-  }
+//       val hit = (top.body.peripheral.ADR <<2 >= 0xF0010000l && top.body.peripheral.ADR<<2 < 0xF0020000l)
+//       top.body.clintWishbone.CYC := top.body.peripheral.CYC && hit
+//       top.body.clintWishbone.STB := top.body.peripheral.STB
+//       top.body.clintWishbone.WE := top.body.peripheral.WE
+//       top.body.clintWishbone.ADR := top.body.peripheral.ADR.resized
+//       top.body.clintWishbone.DAT_MOSI := top.body.peripheral.DAT_MOSI
+//       top.body.peripheral.DAT_MISO := top.body.clintWishbone.DAT_MISO
+//       top.body.peripheral.ACK := top.body.peripheral.CYC  && (!hit || top.body.clintWishbone.ACK)
+//       top.body.peripheral.ERR := False
+//     }
+//     top
+//   }
 
-  simConfig.compile(dutGen).doSimUntilVoid(seed = 42){dut =>
-    dut.body.debugCd.inputClockDomain.get.forkStimulus(10)
+//   simConfig.compile(dutGen).doSimUntilVoid(seed = 42){dut =>
+//     dut.body.debugCd.inputClockDomain.get.forkStimulus(10)
 
-    val ram = SparseMemory()
-    ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
-    ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
-    ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
-    ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
+//     val ram = SparseMemory()
+//     ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
+//     ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
+//     ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
+//     ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
 
-    dut.body.iBridge.dram.simSlave(ram, dut.body.debugCd.inputClockDomain)
-    dut.body.dBridge.dram.simSlave(ram, dut.body.debugCd.inputClockDomain/*, dut.body.dMemBridge.unburstified*/)
+//     dut.body.iBridge.dram.simSlave(ram, dut.body.debugCd.inputClockDomain)
+//     dut.body.dBridge.dram.simSlave(ram, dut.body.debugCd.inputClockDomain/*, dut.body.dMemBridge.unburstified*/)
 
-    dut.body.interrupts #= 0
+//     dut.body.interrupts #= 0
 
-    dut.body.debugCd.inputClockDomain.get.onFallingEdges{
-      if(dut.body.peripheral.CYC.toBoolean){
-        (dut.body.peripheral.ADR.toLong << 2) match {
-          case 0xF0000000l => print(dut.body.peripheral.DAT_MOSI.toLong.toChar)
-          case 0xF0000004l => dut.body.peripheral.DAT_MISO #= (if(System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
-          case _ =>
-        }
-      }
-    }
+//     dut.body.debugCd.inputClockDomain.get.onFallingEdges{
+//       if(dut.body.peripheral.CYC.toBoolean){
+//         (dut.body.peripheral.ADR.toLong << 2) match {
+//           case 0xF0000000l => print(dut.body.peripheral.DAT_MOSI.toLong.toChar)
+//           case 0xF0000004l => dut.body.peripheral.DAT_MISO #= (if(System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
+//           case _ =>
+//         }
+//       }
+//     }
 
-    fork{
-      while(true) {
-        disableSimWave()
-        sleep(100000 * 10)
-        enableSimWave()
-        sleep(  100 * 10)
-      }
-    }
-  }
-}
+//     fork{
+//       while(true) {
+//         disableSimWave()
+//         sleep(100000 * 10)
+//         enableSimWave()
+//         sleep(  100 * 10)
+//       }
+//     }
+//   }
+// }
