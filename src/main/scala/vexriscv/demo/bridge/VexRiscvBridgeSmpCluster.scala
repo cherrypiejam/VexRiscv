@@ -26,6 +26,48 @@ import scala.collection.mutable.ArrayBuffer
 import spinal.lib.generator._
 import vexriscv.ip.fpu.FpuParameter
 
+class RvfiClusterAggregator(ifaces : Seq[RvfiPort]) extends Area {
+  val nretTotal = ifaces.map(_.valid.getBitsWidth).sum
+  val rvfi = RvfiPort(nretTotal)
+
+  var n = 0
+  for (iface <- ifaces) {
+    rvfi.valid.subdivideIn(iface.valid.getBitsWidth bits)(n) := iface.valid
+    rvfi.order.subdivideIn(iface.order.getBitsWidth bits)(n) := iface.order
+    rvfi.insn.subdivideIn(iface.insn.getBitsWidth bits)(n)   := iface.insn
+    rvfi.trap.subdivideIn(iface.trap.getBitsWidth bits)(n)   := iface.trap
+    rvfi.halt.subdivideIn(iface.halt.getBitsWidth bits)(n)   := iface.halt
+    rvfi.intr.subdivideIn(iface.intr.getBitsWidth bits)(n)   := iface.intr
+    rvfi.mode.subdivideIn(iface.mode.getBitsWidth bits)(n)   := iface.mode
+    rvfi.ixl.subdivideIn(iface.ixl.getBitsWidth bits)(n)     := iface.ixl
+
+    // RS1
+    rvfi.rs1.addr.subdivideIn(iface.rs1.addr.getBitsWidth bits)(n)   := iface.rs1.addr
+    rvfi.rs1.rdata.subdivideIn(iface.rs1.rdata.getBitsWidth bits)(n) := iface.rs1.rdata
+
+    // RS2
+    rvfi.rs2.addr.subdivideIn(iface.rs2.addr.getBitsWidth bits)(n)   := iface.rs2.addr
+    rvfi.rs2.rdata.subdivideIn(iface.rs2.rdata.getBitsWidth bits)(n) := iface.rs2.rdata
+
+    // RD
+    rvfi.rd.addr.subdivideIn(iface.rd.addr.getBitsWidth bits)(n)   := iface.rd.addr
+    rvfi.rd.wdata.subdivideIn(iface.rd.wdata.getBitsWidth bits)(n) := iface.rd.wdata
+
+    // PC
+    rvfi.pc.rdata.subdivideIn(iface.pc.rdata.getBitsWidth bits)(n) := iface.pc.rdata
+    rvfi.pc.wdata.subdivideIn(iface.pc.wdata.getBitsWidth bits)(n) := iface.pc.wdata
+
+    // MEM
+    rvfi.mem.addr.subdivideIn(iface.mem.addr.getBitsWidth bits)(n)   := iface.mem.addr
+    rvfi.mem.rmask.subdivideIn(iface.mem.rmask.getBitsWidth bits)(n) := iface.mem.rmask
+    rvfi.mem.wmask.subdivideIn(iface.mem.wmask.getBitsWidth bits)(n) := iface.mem.wmask
+    rvfi.mem.rdata.subdivideIn(iface.mem.rdata.getBitsWidth bits)(n) := iface.mem.rdata
+    rvfi.mem.wdata.subdivideIn(iface.mem.wdata.getBitsWidth bits)(n) := iface.mem.wdata
+
+    n += 1
+  }
+}
+
 case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        jtagHeaderIgnoreWidth : Int,
                                        withExclusiveAndInvalidation : Boolean,
@@ -131,6 +173,10 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
       cpu.enableRiscvDebug(debugCd.outputClockDomain, systemCd)
     }
   }
+
+  val rvfiClusterAggregator = cores.exists(_.cpu.config.withFormal) generate hardFork(
+    new RvfiClusterAggregator(cores.map(_.cpu.logic.cpu.service(classOf[FormalPlugin]).rvfi).toSeq)
+  )
 
   val privilegedDebug = p.privilegedDebug generate new Area{
     val jtagCd = ClockDomain.external("jtag", withReset = false)
@@ -280,7 +326,7 @@ object VexRiscvSmpClusterGen {
                      earlyShifterInjection : Boolean = true,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = false,
-                     withSupervisor : Boolean = true,
+                     withSupervisor : Boolean = false,
                      withFloat : Boolean = false,
                      withDouble : Boolean = false,
                      externalFpu : Boolean = true,
@@ -297,7 +343,11 @@ object VexRiscvSmpClusterGen {
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
                      privilegedDebug : Boolean = false,
-                     csrFull : Boolean = false
+                     csrFull : Boolean = false,
+                     withFormal: Boolean = false,
+                     pmpRegions: Int = 0,
+                     pmpGranularity: Int = 256,
+                     pmpAddressMatchingModes : String = "na4,napot,tor"
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -306,7 +356,7 @@ object VexRiscvSmpClusterGen {
     val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "s" else ""}")
     val csrConfig = if(withSupervisor){
       var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
-      if(csrFull){
+      if (csrFull) {
        c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
          mbadaddrAccess = CsrAccess.READ_WRITE,
@@ -319,7 +369,8 @@ object VexRiscvSmpClusterGen {
       c
     } else {
       assert(!csrFull)
-      CsrPluginConfig(
+      if (pmpRegions > 0) CsrPluginConfig.secure(null)
+      else CsrPluginConfig(
         catchIllegalAccess = true,
         mvendorid      = 0,
         marchid        = 0,
@@ -345,9 +396,32 @@ object VexRiscvSmpClusterGen {
     }
     val config = VexRiscvConfig(
       plugins = List(
-        if(withMmu)new MmuPlugin(
+        if (withMmu) new MmuPlugin(
           ioRange = ioRange
-        )else new StaticMemoryTranslatorPlugin(
+        ) else if (pmpRegions > 0) {
+          // val splitModes = pmpAddressMatchingModes.toLowerCase().split(",");
+
+          // // Ensure the user didn't request any unsupported modes
+          // val unknownModes = splitModes.filterNot(s => List("na4", "napot", "tor").contains(s));
+          // if (unknownModes.length > 0) {
+          //  throw new Exception("Unknown PMP addressing mode: " + unknownModes(0));
+          // }
+
+          // if (splitModes.sameElements(List("napot"))) {
+          //   println("Using optimized PmpPluginNapot, supporting only the NAPOT addressing mode.");
+          //   new PmpPluginNapot(
+          //     regions = pmpRegions,
+          //     granularity = pmpGranularity,
+          //     ioRange = ioRange
+          //   )
+          // } else {
+          //   println("Using PmpPlugin supporting the NA4, NAPOT, and TOR addressing modes.");
+          //   println("This will ignore the pmpGranularity argument and have 4-byte granularity.");
+          new StaticMemoryTranslatorPlugin (
+            ioRange = ioRange
+          )
+          // }
+        } else new StaticMemoryTranslatorPlugin(
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
@@ -395,20 +469,21 @@ object VexRiscvSmpClusterGen {
           dBusRspSlavePipe = true,
           relaxedMemoryTranslationRegister = true,
           config = new DataCacheConfig(
-            cacheSize         = dCacheSize,
-            bytePerLine       = 64,
-            wayCount          = dCacheWays,
-            addressWidth      = 32,
-            cpuDataWidth      = loadStoreWidth,
-            memDataWidth      = dBusWidth,
-            catchAccessError  = true,
-            catchIllegal      = true,
-            catchUnaligned    = true,
-            withLrSc = atomic,
-            withAmo = atomic,
-            withExclusive = coherency,
-            withInvalidate = coherency,
-            withWriteAggregation = dBusWidth > 32
+            cacheSize            = dCacheSize,
+            bytePerLine          = 64,
+            wayCount             = dCacheWays,
+            addressWidth         = 32,
+            cpuDataWidth         = loadStoreWidth,
+            memDataWidth         = dBusWidth,
+            catchAccessError     = true,
+            catchIllegal         = true,
+            catchUnaligned       = true,
+            withLrSc             = atomic,
+            withAmo              = atomic,
+            withExclusive        = coherency,
+            withInvalidate       = coherency,
+            withWriteAggregation = dBusWidth > 32,
+            withFormal           = withFormal
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = dTlbSize,
@@ -462,6 +537,10 @@ object VexRiscvSmpClusterGen {
         new YamlPlugin(s"cpu$hartId.yaml")
       )
     )
+
+    if(withFormal) {
+      config.plugins += new FormalPlugin
+    }
 
     if(withFloat) config.plugins += new FpuPlugin(
       externalFpu = externalFpu,

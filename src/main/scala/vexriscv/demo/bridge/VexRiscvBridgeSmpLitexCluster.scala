@@ -19,7 +19,7 @@ import spinal.lib.sim.SparseMemory
 import vexriscv.demo.bridge.VexRiscvBridgeLitexSmpClusterCmdGen.exposeTime
 import vexriscv.demo.bridge.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.ip.fpu.{FpuCore, FpuParameter}
-import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
+import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin, RvfiPort}
 
 
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
@@ -147,6 +147,11 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
   var wishboneForce32b = false
   var exposeTime = false
   var withMmu = false
+  var formal = false
+  var pmpRegions = 0
+  var pmpGranularity = 256
+  var pmpAddressMatchingModes = "na4,napot,tor"
+  var withSupervisor = false
   assert(new scopt.OptionParser[Unit]("VexRiscvBridgeLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
@@ -173,6 +178,11 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
     opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
     opt[String]("mmu" ) action { (v, c) => withMmu = v.toBoolean }
+    opt[String]("formal" ) action { (v, c) => formal = v.toBoolean  }
+    opt[Int]   ("pmpRegions") action { (v, c) => pmpRegions = v } text("Number of PMP regions, 0 disables PMP")
+    opt[Int]   ("pmpGranularity") action { (v, c) => pmpGranularity = v } text("Granularity of PMP regions (in bytes)")
+    opt[String]("pmpAddressMatchingModes") action { (v, c) => pmpAddressMatchingModes = v } text("Which PMP address matching modes to support (comma-separated, out of [NA4, NAPOT, TOR])")
+    opt[String]("withSupervisor") action { (v, c) => formal = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -180,32 +190,37 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     cluster = VexRiscvSmpClusterParameter(
       cpuConfigs = List.tabulate(cpuCount) { hartId => {
         val c = vexRiscvConfig(
-          hartId = hartId,
-          ioRange = address => address.msb,
+          hartId      = hartId,
+          ioRange     = address => address.msb,
           resetVector = 0,
-          iBusWidth = iBusWidth,
-          dBusWidth = dBusWidth,
-          iCacheSize = iCacheSize,
-          dCacheSize = dCacheSize,
-          iCacheWays = iCacheWays,
-          dCacheWays = dCacheWays,
+          iBusWidth   = iBusWidth,
+          dBusWidth   = dBusWidth,
+          iCacheSize  = iCacheSize,
+          dCacheSize  = dCacheSize,
+          iCacheWays  = iCacheWays,
+          dCacheWays  = dCacheWays,
           withInstructionCache =
             if (iCacheSize == 0) false else true,
           withDataCache =
             if (dCacheSize == 0) false else true,
-          coherency = coherency,
-          privilegedDebug = privilegedDebug,
-          iBusRelax = true,
-          earlyBranch = true,
-          withFloat = fpu,
-          withDouble = fpu,
-          externalFpu = fpu,
-          loadStoreWidth = if(fpu) 64 else 32,
-          rvc = rvc,
-          injectorStage = rvc,
-          iTlbSize = iTlbSize,
-          dTlbSize = dTlbSize,
-          withMmu = withMmu,
+          coherency               = coherency,
+          privilegedDebug         = privilegedDebug,
+          iBusRelax               = true,
+          earlyBranch             = true,
+          withFloat               = fpu,
+          withDouble              = fpu,
+          externalFpu             = fpu,
+          loadStoreWidth          = if(fpu) 64 else 32,
+          rvc                     = rvc,
+          injectorStage           = rvc,
+          iTlbSize                = iTlbSize,
+          dTlbSize                = dTlbSize,
+          withMmu                 = withMmu,
+          withFormal              = formal,
+          pmpRegions              = pmpRegions,
+          pmpGranularity          = pmpGranularity,
+          pmpAddressMatchingModes = pmpAddressMatchingModes,
+          withSupervisor          = withSupervisor
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
@@ -228,10 +243,14 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
 
   def dutGen = {
     val toplevel = new Component {
+      val rvfi = formal generate out(RvfiPort(cpuCount))
       val body = new VexRiscvLitexSmpCluster(
         p = parameter
       )
       body.setName("")
+      if (formal) {
+        rvfi := body.rvfiClusterAggregator.rvfi
+      }
     }
     toplevel
   }

@@ -368,6 +368,13 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     execute plug new Area {
       import execute._
 
+      if(withFormal) {
+        insert(FORMAL_MEM_ADDR)  := dBus.cmd.address & U"xFFFFFFFC"
+        insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? dBus.cmd.payload.mask | B"0000"
+        insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? dBus.cmd.payload.mask | B"0000"
+        insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data.resized
+      }
+
       val size = input(INSTRUCTION)(13 downto 12).asUInt
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.address := input(SRC_ADD).asUInt
@@ -471,6 +478,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       mmuBus.end := !arbitration.isStuck || arbitration.removeIt
       cache.io.cpu.memory.mmuRsp := mmuBus.rsp
       cache.io.cpu.memory.mmuRsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
+
+      if(withFormal) insert(FORMAL_MEM_RDATA) := cache.io.mem.rsp.data.resized
 
       if(tightlyGen){
         when(input(MEMORY_ENABLE) && input(MEMORY_TIGHTLY).orR){

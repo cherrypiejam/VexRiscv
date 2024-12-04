@@ -32,9 +32,10 @@ case class DataCacheConfig(cacheSize : Int,
                            directTlbHit : Boolean = false,
                            mergeExecuteMemory : Boolean = false,
                            asyncTagMemory : Boolean = false,
-                           withWriteAggregation : Boolean = false){
+                           withWriteAggregation : Boolean = false,
+                           withFormal : Boolean = false){
 
-  if(rfDataWidth == -1)  rfDataWidth = cpuDataWidth 
+  if(rfDataWidth == -1)  rfDataWidth = cpuDataWidth
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
   assert(isPow2(pendingMax))
