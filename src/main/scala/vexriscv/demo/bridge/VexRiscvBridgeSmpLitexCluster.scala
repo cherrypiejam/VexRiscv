@@ -182,7 +182,7 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     opt[Int]   ("pmpRegions") action { (v, c) => pmpRegions = v } text("Number of PMP regions, 0 disables PMP")
     opt[Int]   ("pmpGranularity") action { (v, c) => pmpGranularity = v } text("Granularity of PMP regions (in bytes)")
     opt[String]("pmpAddressMatchingModes") action { (v, c) => pmpAddressMatchingModes = v } text("Which PMP address matching modes to support (comma-separated, out of [NA4, NAPOT, TOR])")
-    opt[String]("withSupervisor") action { (v, c) => formal = v.toBoolean }
+    opt[String]("withSupervisor") action { (v, c) => withSupervisor = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
