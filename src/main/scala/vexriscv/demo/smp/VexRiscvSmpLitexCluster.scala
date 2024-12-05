@@ -32,9 +32,19 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     iArbiter.bmb        -> List(iBridge.bmb),
     dBusNonCoherent.bmb -> List(dBridge.bmb)
   )
+
+  val iArbiterSpliter0 = BmbBridgeGenerator(
+    mapping = SizeMapping(0xc0000000l, 0x10000000)
+  )
+  val iArbiterSpliter1 = BmbBridgeGenerator()
+  val iArbiterAggregator = BmbBridgeGenerator()
+
   interconnect.addConnection(
-    iArbiter.bmb        -> List(peripheralBridge.bmb),
-    dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
+    iArbiter.bmb           -> List(iArbiterSpliter0.bmb, iArbiterSpliter1.bmb),
+    iArbiterSpliter0.bmb   -> List(iArbiterAggregator.bmb),
+    iArbiterSpliter1.bmb   -> List(iArbiterAggregator.bmb),
+    iArbiterAggregator.bmb -> List(peripheralBridge.bmb),
+    dBusNonCoherent.bmb    -> List(peripheralBridge.bmb)
   )
 
   val fpuGroups = (cores.reverse.grouped(p.cpuPerFpu)).toList.reverse
