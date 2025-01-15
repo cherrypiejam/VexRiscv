@@ -152,6 +152,8 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
   var pmpGranularity = 256
   var pmpAddressMatchingModes = "na4,napot,tor"
   var withSupervisor = false
+  var sharedRegionStart = 0x40000000l
+  var sharedRegionSize = 0x10000000l
   assert(new scopt.OptionParser[Unit]("VexRiscvBridgeLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
@@ -179,10 +181,12 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
     opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
     opt[String]("mmu" ) action { (v, c) => withMmu = v.toBoolean }
     opt[String]("formal" ) action { (v, c) => formal = v.toBoolean  }
-    opt[Int]   ("pmpRegions") action { (v, c) => pmpRegions = v } text("Number of PMP regions, 0 disables PMP")
-    opt[Int]   ("pmpGranularity") action { (v, c) => pmpGranularity = v } text("Granularity of PMP regions (in bytes)")
-    opt[String]("pmpAddressMatchingModes") action { (v, c) => pmpAddressMatchingModes = v } text("Which PMP address matching modes to support (comma-separated, out of [NA4, NAPOT, TOR])")
-    opt[String]("withSupervisor") action { (v, c) => withSupervisor = v.toBoolean }
+    opt[Int]   ("pmp-regions") action { (v, c) => pmpRegions = v } text("Number of PMP regions, 0 disables PMP")
+    opt[Int]   ("pmp-granularity") action { (v, c) => pmpGranularity = v } text("Granularity of PMP regions (in bytes)")
+    opt[String]("pmp-address-matching-modes") action { (v, c) => pmpAddressMatchingModes = v } text("Which PMP address matching modes to support (comma-separated, out of [NA4, NAPOT, TOR])")
+    opt[Boolean]("supervisor") action { (v, c) => withSupervisor = v }
+    opt[Long]("shared-region-start") action { (v, c) => sharedRegionStart = v }
+    opt[Long]("shared-region-size") action { (v, c) => sharedRegionSize = v }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -231,7 +235,8 @@ object VexRiscvBridgeLitexSmpClusterCmdGen extends App {
       fpu = fpu,
       jtagHeaderIgnoreWidth = 0,
       privilegedDebug = privilegedDebug,
-      hardwareBreakpoints = hardwareBreakpoints
+      hardwareBreakpoints = hardwareBreakpoints,
+      sharedRegionMapping = SizeMapping(sharedRegionStart, sharedRegionSize),
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),

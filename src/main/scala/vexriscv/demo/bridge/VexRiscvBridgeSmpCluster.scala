@@ -6,7 +6,7 @@ import spinal.core.sim.{onSimEnd, simSuccess}
 import spinal.lib._
 import spinal.lib.bus.bmb.sim.BmbMemoryAgent
 import spinal.lib.bus.bmb._
-import spinal.lib.bus.misc.{DefaultMapping, SizeMapping, MaskMapping}
+import spinal.lib.bus.misc.{DefaultMapping, SizeMapping, MaskMapping, AddressMapping}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneToBmb, WishboneToBmbGenerator}
 import spinal.lib.com.jtag.{Jtag, JtagInstructionDebuggerGenerator, JtagTapInstructionCtrl}
 import spinal.lib.com.jtag.sim.JtagTcp
@@ -75,7 +75,8 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        outOfOrderDecoder : Boolean = true,
                                        fpu : Boolean = false,
                                        privilegedDebug : Boolean = false,
-                                       hardwareBreakpoints : Int = 0)
+                                       hardwareBreakpoints : Int = 0,
+                                       sharedRegionMapping : AddressMapping = MaskMapping(0x0, 0x0))
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -123,9 +124,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
   // TODO make the mapping parameterizable
   val dBusShared = BmbBridgeGenerator(
-    // Scala doesn't support unsigned int
-    // 0xc0000000 will be interpreted as a signed integer, which is negative
-    mapping = SizeMapping(BigInt("40000000", 16), 0x10000000)
+    mapping = p.sharedRegionMapping
   )
 
   interconnect.addConnection(
@@ -422,6 +421,7 @@ object VexRiscvSmpClusterGen {
         if (withMmu) new MmuPlugin(
           ioRange = ioRange
         ) else if (pmpRegions > 0) {
+          // TODO: Fix Pmp region
           // val splitModes = pmpAddressMatchingModes.toLowerCase().split(",");
 
           // // Ensure the user didn't request any unsupported modes
