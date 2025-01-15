@@ -369,7 +369,30 @@ object VexRiscvSmpClusterGen {
       c
     } else {
       assert(!csrFull)
-      if (pmpRegions > 0) CsrPluginConfig.secure(null)
+      if (pmpRegions > 0) CsrPluginConfig( // secure config
+        catchIllegalAccess  = true,
+        mvendorid           = 1,
+        marchid             = 2,
+        mimpid              = 3,
+        mhartid             = hartId,
+        misaExtensionsInit  = 0x101064, // RV32GCFMU
+        misaAccess          = CsrAccess.READ_WRITE,
+        mtvecAccess         = CsrAccess.READ_WRITE,
+        mtvecInit           = null,
+        mepcAccess          = CsrAccess.READ_WRITE,
+        mscratchGen         = true,
+        mcauseAccess        = CsrAccess.READ_WRITE,
+        mbadaddrAccess      = CsrAccess.READ_WRITE,
+        mcycleAccess        = CsrAccess.READ_WRITE,
+        minstretAccess      = CsrAccess.READ_WRITE,
+        ucycleAccess        = CsrAccess.READ_ONLY,
+        uinstretAccess      = CsrAccess.READ_ONLY,
+        wfiGenAsWait        = true,
+        ecallGen            = true,
+        userGen             = true,
+        medelegAccess       = CsrAccess.READ_WRITE,
+        midelegAccess       = CsrAccess.READ_WRITE
+      )
       else CsrPluginConfig(
         catchIllegalAccess = true,
         mvendorid      = 0,
