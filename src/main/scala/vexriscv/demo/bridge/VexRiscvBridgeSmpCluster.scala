@@ -106,7 +106,9 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
   }
 
   val dBusCoherent = BmbBridgeGenerator()
+  dBusCoherent.setName("dBusCoherent123")
   val dBusNonCoherent = BmbBridgeGenerator()
+  dBusNonCoherent.setName("dBusNonCoherent123")
 
   val smp = p.withExclusiveAndInvalidation generate new Area{
     val exclusiveMonitor = BmbExclusiveMonitorGenerator()
@@ -238,12 +240,13 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
       interconnect.slaves(localBridge.bmb).forceAccessSourceDataWidth(32)
   }
 
-  val plic = BmbPlicGenerator()(interconnect = null)
+  val plic = BridgePlicGenerator()(interconnect = null)
   plic.priorityWidth.load(2)
   plic.mapping.load(PlicMapping.sifive)
 
-  val plicWishboneBridge = new Generator{
+  val plicWishboneBridge = new Generator {
     dependencies += plic.ctrl
+    dependencies += plic.contextCtrls
 
     plic.accessRequirements.load(BmbAccessParameter(
       addressWidth = 22,
@@ -254,12 +257,22 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
       alignment =  BmbParameter.BurstAlignement.LENGTH
     )))
 
-    val logic = add task new Area{
+    val logic = add task new Area {
       val bridge = WishboneToBmb(WishboneConfig(20, 32))
       bridge.io.output >> plic.ctrl
+      val contextBridgesInputs = plic.contextCtrls.map(contextCtrls => {
+        contextCtrls.map( contextCtrl => {
+          val contextBridge = WishboneToBmb(WishboneConfig(20, 32))
+          contextBridge.io.output >> contextCtrl
+          contextBridge.io.input
+        })
+      })
     }
   }
-  val plicWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.bridge.io.input)
+  val plicCtrlWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.bridge.io.input)
+  val plicCtrlWishbones = plicWishboneBridge.produceIos {
+    plicWishboneBridge.logic.contextBridgesInputs
+  }
 
   val clint = BmbClintGenerator(0)(interconnect = null)
   val clintWishboneBridge = new Generator{
